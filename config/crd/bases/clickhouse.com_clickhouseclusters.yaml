@@ -33,6 +33,10 @@ spec:
     - jsonPath: .status.version
       name: Version
       type: string
+    - jsonPath: .status.conditions[?(@.type=="ExternalSecretValid")].status
+      name: ExternalSecret
+      priority: 1
+      type: string
     - jsonPath: .metadata.creationTimestamp
       name: Age
       type: date
