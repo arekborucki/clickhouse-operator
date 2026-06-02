@@ -183,7 +183,7 @@ spec:
 | `Disabled` | The operator does **not** create PDBs and **deletes** any existing ones with matching labels. Useful for development clusters where every voluntary disruption should be allowed. |
 | `Ignored` | The operator neither creates nor deletes PDBs. Existing PDBs are left alone. Use this when another system (e.g. policy admission, GitOps tool) owns PDB management for you. |
 
-Example — disable PDB management completely on a dev cluster:
+Example — disable PDB management completely on a development cluster:
 
 ```yaml
 spec:
