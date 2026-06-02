@@ -23,3 +23,8 @@ gofmt
 Gomega
 matchers
 configs
+autoscaler
+GitOps
+Gatekeeper
+Kyverno
+NotReady
