@@ -28,3 +28,7 @@ GitOps
 Gatekeeper
 Kyverno
 NotReady
+reachability
+interserver
+misconfiguration
+requeues
