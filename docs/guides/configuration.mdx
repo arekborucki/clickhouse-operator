@@ -432,6 +432,95 @@ spec.additionalPorts[0].port: 8123 is reserved for the operator-managed HTTP por
 spec.additionalPorts[0].name: "http" is reserved by the operator
 ```
 
+## Version probe and upgrade channel {#version-probe-and-upgrade-channel}
+
+The operator does two independent things with cluster versions:
+
+1. **Version probe** — a Kubernetes `Job` that runs the container image once to detect the running ClickHouse / Keeper version. The detected version is recorded in `.status.version` and used by other reconciliation steps (e.g. the `External Secret` named-collections key is only required from ClickHouse `25.12`).
+2. **Upgrade channel** — a periodic check against the public ClickHouse release feed (`https://clickhouse.com/data/version_date.tsv`). The operator reports whether a newer version is available via the `VersionUpgraded` status condition. It never upgrades the cluster on its own — the user is in control of the image tag.
+
+### Choosing a release channel {#upgrade-channel-choosing}
+
+`spec.upgradeChannel` selects which set of upstream releases the operator compares against. Same field exists on both `ClickHouseCluster` and `KeeperCluster`.
+
+```yaml
+spec:
+  upgradeChannel: lts   # or "stable", or "25.8", or omitted
+```
+
+Allowed values (validated by the CRD with the pattern `^(lts|stable|\d+\.\d+)?$`):
+
+| Value | Behavior |
+|---|---|
+| _empty_ (default) | The operator proposes only **minor** updates within the currently-running major.minor line. A cluster on `25.8.3.1` will be told about `25.8.4.x` but not `25.9.x`. |
+| `stable` | Tracks the upstream `stable` channel — the latest non-LTS release that ClickHouse Inc. flags as stable. Receives major upgrades sooner. |
+| `lts` | Tracks the upstream `lts` channel — long-term support releases. Receives major upgrades less frequently, with longer support windows. |
+| `25.8` (or any `<major>.<minor>`) | Pins the channel to a specific major.minor line. Major upgrades beyond it are not proposed even if a newer version exists upstream. |
+
+A cluster left on the default (empty) channel is the safest choice for production: the operator will only flag patch-level updates, and never surprises you with a major version jump even if you redeploy the operator.
+
+### Status conditions {#version-status-conditions}
+
+Two conditions surface the result of the probe and the upgrade check:
+
+| Condition | Reason | Meaning |
+|---|---|---|
+| `VersionInSync` | `VersionMatch` | All replicas report the same version as the image |
+| `VersionInSync` | `VersionMismatch` | Replicas are running different versions (typically during a rolling upgrade) |
+| `VersionInSync` | `VersionPending` | Version probe Job has not finished yet |
+| `VersionInSync` | `VersionProbeFailed` | Probe Job failed; the operator cannot determine the running version |
+| `VersionUpgraded` | `UpToDate` | The cluster is on the latest version available in the selected channel |
+| `VersionUpgraded` | `MinorUpdateAvailable` | A newer patch is available in the same `major.minor` line |
+| `VersionUpgraded` | `MajorUpdateAvailable` | A newer `major.minor` is available within the chosen channel |
+| `VersionUpgraded` | `VersionOutdated` | The running version is older than every release in the selected channel |
+| `VersionUpgraded` | `WrongReleaseChannel` | The configured `upgradeChannel` does not match any upstream channel (e.g. typo) |
+| `VersionUpgraded` | `UpgradeCheckFailed` | The operator could not reach the upstream release feed |
+
+Inspect them with:
+
+```bash
+kubectl get clickhousecluster sample -o yaml | sed -n '/conditions:/,/^[^ ]/p'
+```
+
+### Overriding the version probe Job {#version-probe-template}
+
+The probe is implemented as a regular Kubernetes `Job`. If your cluster has admission policies that require specific tolerations, node selectors, security contexts, or you want to limit how long completed probe Jobs linger, override the template via `spec.versionProbeTemplate`:
+
+```yaml
+spec:
+  versionProbeTemplate:
+    spec:
+      ttlSecondsAfterFinished: 600   # delete completed probe Jobs 10 minutes after completion
+      template:
+        spec:
+          nodeSelector:
+            kubernetes.io/arch: amd64
+          tolerations:
+            - key: dedicated
+              operator: Equal
+              value: clickhouse
+              effect: NoSchedule
+          containers:
+            - name: version-probe
+              resources:
+                requests:
+                  cpu: 50m
+                  memory: 64Mi
+```
+
+The container name `version-probe` is the operator's default — the entry under `containers:` matches it by name, so the operator deep-merges the user-provided fields on top of the defaults.
+
+### Operator-wide controls {#version-operator-flags}
+
+Two flags on the operator manager control the upgrade-check loop globally:
+
+| Flag | Default | Effect |
+|---|---|---|
+| `--version-update-interval` | `24h` | How often the operator re-fetches the upstream version list |
+| `--disable-version-update-checks` | `false` | Disables the upgrade checker entirely. The `VersionUpgraded` condition is not set, and no outbound HTTP traffic to `clickhouse.com` is generated |
+
+Set `--disable-version-update-checks=true` in air-gapped environments or when egress to `clickhouse.com` is not allowed.
+
 ## ClickHouse settings {#clickhouse-settings}
 
 ### Default user password {#default-user-password}
