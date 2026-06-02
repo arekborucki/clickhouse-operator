@@ -331,6 +331,107 @@ The operator requeues reconciliation while the Secret is invalid, so once you ad
 The set of required keys depends on the running ClickHouse version. `named-collections-key` is only validated once the operator's version probe has detected ClickHouse `25.12` or newer. On older versions the key may be absent from the Secret.
 </Note>
 
+## Additional ports {#additional-ports}
+
+The operator exposes a fixed set of ports on every ClickHouse Pod and its headless Service: `8123` HTTP, `9000` native, `9009` interserver, `9001` management, `9363` Prometheus metrics, and the TLS variants `8443`/`9440` when TLS is enabled. To make ClickHouse listen on additional protocols — MySQL, PostgreSQL, gRPC, or any custom port — declare them in `spec.additionalPorts`:
+
+```yaml
+spec:
+  additionalPorts:
+    - name: mysql
+      port: 9004
+    - name: postgres
+      port: 9005
+    - name: grpc
+      port: 9100
+```
+
+The operator adds those ports to the Pod's `containerPorts` and to the headless Service. The complete example lives at [`examples/custom_protocols.yaml`](https://github.com/ClickHouse/clickhouse-operator/blob/main/examples/custom_protocols.yaml).
+
+<Warning>
+`additionalPorts` only opens the ports on the Kubernetes side. It does **not** configure the ClickHouse server to listen on them. You also have to enable the matching protocol in `spec.settings.extraConfig.protocols`. Without that, the port is open on the Service but nothing inside the pod is answering.
+</Warning>
+
+### End-to-end example: MySQL wire protocol {#additional-ports-mysql-example}
+
+To expose ClickHouse over the MySQL wire protocol on port `9004`:
+
+```yaml
+apiVersion: clickhouse.com/v1alpha1
+kind: ClickHouseCluster
+metadata:
+  name: sample
+spec:
+  replicas: 1
+  keeperClusterRef:
+    name: sample
+  dataVolumeClaimSpec:
+    resources:
+      requests:
+        storage: 2Gi
+
+  # 1) Open the port on the Pod and the headless Service.
+  additionalPorts:
+    - name: mysql
+      port: 9004
+
+  # 2) Tell ClickHouse server to actually listen on it.
+  settings:
+    extraConfig:
+      protocols:
+        mysql:
+          type: mysql
+          port: 9004
+          description: "MySQL wire protocol"
+```
+
+After applying, verify from inside the cluster:
+
+```bash
+kubectl exec sample-clickhouse-0-0-0 -- \
+  clickhouse-client --port 9004 --query "SELECT 1"
+```
+
+### Field constraints {#additional-ports-constraints}
+
+| Field | Rule |
+|---|---|
+| `name` | Must match the DNS_LABEL pattern `^[a-z]([-a-z0-9]*[a-z0-9])?$`, max 63 characters. Uniqueness is enforced by the CRD as a list-map key. |
+| `port` | Integer in `[1, 65535]`. The webhook rejects duplicate port numbers within the list. |
+
+### Reserved ports and names {#additional-ports-reserved}
+
+The validating webhook rejects `additionalPorts` entries that would collide with ports the operator binds itself. All TLS-related ports are reserved **unconditionally** so that flipping `spec.settings.tls.enabled` later cannot break a previously valid cluster.
+
+| Port | Reserved for |
+|---|---|
+| `8123` | HTTP |
+| `8443` | HTTPS |
+| `9000` | native TCP |
+| `9440` | native TLS |
+| `9009` | interserver |
+| `9001` | management |
+| `9363` | Prometheus metrics |
+
+The following names are also rejected — they are the operator's internal protocol-type identifiers (not the human-readable aliases):
+
+| Name |
+|---|
+| `http` |
+| `http-secure` |
+| `tcp` |
+| `tcp-secure` |
+| `interserver` |
+| `management` |
+| `prometheus` |
+
+A rejected request produces an error such as:
+
+```
+spec.additionalPorts[0].port: 8123 is reserved for the operator-managed HTTP port
+spec.additionalPorts[0].name: "http" is reserved by the operator
+```
+
 ## ClickHouse settings {#clickhouse-settings}
 
 ### Default user password {#default-user-password}
