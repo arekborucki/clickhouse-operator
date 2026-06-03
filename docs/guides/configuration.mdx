@@ -135,7 +135,8 @@ The operator picks safe defaults based on the cluster size so that a fresh `appl
 |---|---|---|
 | `ClickHouseCluster` | `replicas: 1` (single-replica shard) | `maxUnavailable: 1` — disruption is allowed because there is nothing to preserve anyway |
 | `ClickHouseCluster` | `replicas: 2+` (multi-replica shard) | `minAvailable: 1` — at least one replica per shard must stay up |
-| `KeeperCluster` | any | `maxUnavailable: replicas/2` — preserves the RAFT quorum for a `2F+1` cluster (3 replicas tolerate 1 down, 5 replicas tolerate 2 down) |
+| `KeeperCluster` | `replicas: 1` | `maxUnavailable: 1` — single-replica clusters cannot use `replicas/2 = 0`, which would block every voluntary disruption (introduced in [#208](https://github.com/ClickHouse/clickhouse-operator/pull/208)) |
+| `KeeperCluster` | `replicas: 3+` | `maxUnavailable: replicas/2` — preserves the RAFT quorum for a `2F+1` cluster (3 replicas tolerate 1 down, 5 replicas tolerate 2 down) |
 
 For a 3-shard ClickHouseCluster with `replicas: 3`, the operator creates three PDBs, one per shard, each with `minAvailable: 1`.
 
