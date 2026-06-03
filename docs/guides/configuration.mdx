@@ -202,7 +202,7 @@ spec:
 
 ### Cluster-wide opt-out {#pdb-cluster-wide-disable}
 
-PDB management can also be disabled cluster-wide via the operator's `ENABLE_PDB` environment variable. With `ENABLE_PDB=false`, the operator skips the PDB reconcile step for **every** ClickHouseCluster and KeeperCluster regardless of their `spec.podDisruptionBudget.policy`.
+PDB management can also be disabled cluster-wide via the operator's `ENABLE_PDB` environment variable. With `ENABLE_PDB=false`, the operator skips the PDB reconcile step for **every** ClickHouseCluster and KeeperCluster regardless of their `spec.podDisruptionBudget.policy`, and **does not watch** `PodDisruptionBudget` resources at all. The operator's ServiceAccount therefore does not need RBAC permissions on `poddisruptionbudgets.policy/v1`, which is useful when running the operator under a restricted ServiceAccount that intentionally omits those permissions.
 
 ```yaml
 # in the operator Deployment spec
