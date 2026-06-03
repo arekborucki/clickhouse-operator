@@ -457,7 +457,7 @@ Allowed values (validated by the CRD with the pattern `^(lts|stable|\d+\.\d+)?$`
 | `lts` | Tracks the upstream `lts` channel — long-term support releases. Receives major upgrades less frequently, with longer support windows. |
 | `25.8` (or any `<major>.<minor>`) | Pins the channel to a specific major.minor line. Major upgrades beyond it are not proposed even if a newer version exists upstream. |
 
-A cluster left on the default (empty) channel is the safest choice for production: the operator will only flag patch-level updates, and never surprises you with a major version jump even if you redeploy the operator.
+For production, pinning the channel to an explicit `<major>.<minor>` (e.g. `25.8`) is generally preferred. It locks the cluster to the intended major release line and lets the operator surface a `WrongReleaseChannel` warning if any replica somehow drifts onto a different major — which matters especially when the image is referenced by a digest (`@sha256:...`) rather than by a human-readable tag. The empty default is fine for development clusters where major-version jumps are not a concern.
 
 ### Status conditions {#version-status-conditions}
 
@@ -466,14 +466,14 @@ Two conditions surface the result of the probe and the upgrade check:
 | Condition | Reason | Meaning |
 |---|---|---|
 | `VersionInSync` | `VersionMatch` | All replicas report the same version as the image |
-| `VersionInSync` | `VersionMismatch` | Replicas are running different versions (typically during a rolling upgrade) |
+| `VersionInSync` | `VersionMismatch` | Replicas are running different versions. This reason is suppressed during a planned rolling upgrade. It typically surfaces when a mutable image tag has been pinned (for example `latest` or a bare major like `26.3`) and the underlying registry has shifted between pulls, so different replicas ended up on different patches of the same tag. |
 | `VersionInSync` | `VersionPending` | Version probe Job has not finished yet |
 | `VersionInSync` | `VersionProbeFailed` | Probe Job failed; the operator cannot determine the running version |
 | `VersionUpgraded` | `UpToDate` | The cluster is on the latest version available in the selected channel |
 | `VersionUpgraded` | `MinorUpdateAvailable` | A newer patch is available in the same `major.minor` line |
 | `VersionUpgraded` | `MajorUpdateAvailable` | A newer `major.minor` is available within the chosen channel |
-| `VersionUpgraded` | `VersionOutdated` | The running version is older than every release in the selected channel |
-| `VersionUpgraded` | `WrongReleaseChannel` | The configured `upgradeChannel` does not match any upstream channel (e.g. typo) |
+| `VersionUpgraded` | `VersionOutdated` | The running version is out of date and will no longer receive fixes from the selected channel — typically because the major line has been dropped from `lts` or `stable` upstream |
+| `VersionUpgraded` | `WrongReleaseChannel` | The running image does not belong to the selected `upgradeChannel`. Example: a cluster running `26.5` with `upgradeChannel: lts`, since `26.5` is not part of the upstream `lts` line. |
 | `VersionUpgraded` | `UpgradeCheckFailed` | The operator could not reach the upstream release feed |
 
 Inspect them with:
