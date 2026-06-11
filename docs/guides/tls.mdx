@@ -169,7 +169,7 @@ When `tls.enabled: true`, the operator:
 When you also set `required: true`, the operator additionally:
 
 - **Removes the insecure ports** `9000` (native) and `8123` (HTTP) — only the TLS
-  variants remain. Plaintext clients can no longer connect.
+  variants remain, so plaintext clients can no longer connect.
 - **Switches the pod liveness probe** to the secure native port `9440`, so health
   checking continues to work without a plaintext listener.
 
@@ -177,7 +177,7 @@ When you also set `required: true`, the operator additionally:
 The TLS ports `8443` and `9440` are reserved by the webhook **unconditionally**,
 even when TLS is off, so toggling `tls.enabled` later never collides with a
 `spec.additionalPorts` entry. See
-[Configuration → additionalPorts](/products/kubernetes-operator/guides/configuration#additional-ports).
+[Configuration → `additionalPorts`](/products/kubernetes-operator/guides/configuration#additional-ports).
 </Note>
 
 ## Step 4 — Connect over TLS {#step-4-connect}
@@ -278,10 +278,10 @@ kubectl -n <namespace> exec <pod> -- ls /etc/clickhouse-server/tls/
 | Pods fail to start / volume mount error after enabling TLS | The referenced Secret is missing or lacks `tls.crt`/`tls.key`/`ca.crt`. The operator does not validate the Secret's contents — missing keys surface as a pod volume-mount failure, not a dedicated status condition. Inspect the pod with `kubectl describe pod`. |
 | Webhook rejects the cluster | `required: true` set without `enabled: true`, or `enabled: true` without `serverCertSecret`. |
 | Client `certificate verify failed` | Client is not trusting the CA. Pass the `ca.crt` from the Secret, or check the `dnsNames` on the certificate cover the host you connect to. |
-| Plaintext client suddenly can't connect | `required: true` removed ports `9000`/`8123`. Switch the client to `9440`/`8443`, or set `required: false` to keep insecure ports open during migration. |
+| A plaintext client suddenly can't connect | `required: true` removed ports `9000`/`8123`. Switch the client to `9440`/`8443`, or set `required: false` to keep insecure ports open during migration. |
 
 ## See also {#see-also}
 
 - [Configuration → TLS/SSL configuration](/products/kubernetes-operator/guides/configuration#tls-ssl-configuration) — field reference
-- [Configuration → additionalPorts](/products/kubernetes-operator/guides/configuration#additional-ports) — reserved ports
+- [Configuration → `additionalPorts`](/products/kubernetes-operator/guides/configuration#additional-ports) — reserved ports
 - [API Reference → ClusterTLSSpec](/products/kubernetes-operator/reference/api-reference#clustertlsspec)
