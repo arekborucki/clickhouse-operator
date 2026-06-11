@@ -99,8 +99,10 @@ identical.
 ## Step 2 — Issue the server certificate {#step-2-cert}
 
 Request a leaf certificate from the CA issuer. The `dnsNames` must cover how
-clients address the cluster — the per-replica headless service and the
-cluster-wide service.
+clients address the pods. The operator creates a single **headless** Service named
+`<cluster-name>-clickhouse-headless`, and each replica pod is addressable at
+`<cluster-name>-clickhouse-<shard>-<index>-0.<cluster-name>-clickhouse-headless.<namespace>.svc.cluster.local`.
+A wildcard over the headless service domain covers every replica:
 
 ```yaml
 apiVersion: cert-manager.io/v1
@@ -116,10 +118,16 @@ spec:
     name: clickhouse-ca-issuer
     kind: Issuer
   dnsNames:
-    - "*.<cluster-name>.<namespace>.svc.cluster.local"
-    - "<cluster-name>.<namespace>.svc.cluster.local"
+    - "*.<cluster-name>-clickhouse-headless.<namespace>.svc"
+    - "*.<cluster-name>-clickhouse-headless.<namespace>.svc.cluster.local"
     - "localhost"
 ```
+
+<Note>
+The operator does **not** create a cluster-wide (load-balanced) Service. If you
+want a single stable endpoint to connect to, create your own `ClusterIP` Service
+selecting the cluster's pods and add its DNS name to `dnsNames` above.
+</Note>
 
 cert-manager creates the `clickhouse-cert` Secret with `tls.crt`, `tls.key`, and
 `ca.crt`, and refreshes it before expiry. Verify it exists:
@@ -174,13 +182,15 @@ even when TLS is off, so toggling `tls.enabled` later never collides with a
 
 ## Step 4 — Connect over TLS {#step-4-connect}
 
-With `required: true`, clients must use the secure ports and trust the CA.
+With `required: true`, clients must use the secure ports and trust the CA. Address
+a specific replica pod through the headless Service (or your own `ClusterIP`
+Service if you created one).
 
 **Native protocol** (`clickhouse-client`, port `9440`):
 
 ```bash
 clickhouse-client --secure \
-  --host <cluster-name>.<namespace>.svc.cluster.local \
+  --host <cluster-name>-clickhouse-0-0-0.<cluster-name>-clickhouse-headless.<namespace>.svc.cluster.local \
   --port 9440 \
   --ca-certificate /path/to/ca.crt \
   --query "SELECT 1"
@@ -190,7 +200,7 @@ clickhouse-client --secure \
 
 ```bash
 curl --cacert /path/to/ca.crt \
-  "https://<cluster-name>.<namespace>.svc.cluster.local:8443/?query=SELECT%201"
+  "https://<cluster-name>-clickhouse-0-0-0.<cluster-name>-clickhouse-headless.<namespace>.svc.cluster.local:8443/?query=SELECT%201"
 ```
 
 Pull `ca.crt` straight from the Secret for local testing:
@@ -248,10 +258,10 @@ it instead of the certificate's own `ca.crt`.
 
 ## Verify and troubleshoot {#troubleshoot}
 
-**Confirm the secure ports are live on the Service:**
+**Confirm the secure ports are live on the headless Service:**
 
 ```bash
-kubectl -n <namespace> get svc <cluster-name> \
+kubectl -n <namespace> get svc <cluster-name>-clickhouse-headless \
   -o jsonpath='{.spec.ports[*].name}'
 # expect: ... tcp-secure http-secure   (and NO tcp/http when required: true)
 ```
@@ -265,7 +275,7 @@ kubectl -n <namespace> exec <pod> -- ls /etc/clickhouse-server/tls/
 
 | Symptom | Likely cause |
 |---|---|
-| Cluster stuck reconciling after enabling TLS | `serverCertSecret` missing, or the Secret lacks `tls.crt`/`tls.key`/`ca.crt`. Check the cluster's status conditions. |
+| Pods fail to start / volume mount error after enabling TLS | The referenced Secret is missing or lacks `tls.crt`/`tls.key`/`ca.crt`. The operator does not validate the Secret's contents — missing keys surface as a pod volume-mount failure, not a dedicated status condition. Inspect the pod with `kubectl describe pod`. |
 | Webhook rejects the cluster | `required: true` set without `enabled: true`, or `enabled: true` without `serverCertSecret`. |
 | Client `certificate verify failed` | Client is not trusting the CA. Pass the `ca.crt` from the Secret, or check the `dnsNames` on the certificate cover the host you connect to. |
 | Plaintext client suddenly can't connect | `required: true` removed ports `9000`/`8123`. Switch the client to `9440`/`8443`, or set `required: false` to keep insecure ports open during migration. |
