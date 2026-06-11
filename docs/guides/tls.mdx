@@ -3,7 +3,7 @@ position: 5
 slug: /clickhouse-operator/guides/tls
 title: 'Securing with TLS'
 keywords: ['kubernetes', 'tls', 'ssl', 'cert-manager', 'security', 'certificates']
-description: 'End-to-end walkthrough for securing a ClickHouse cluster with TLS using cert-manager, including client connections and Keeper encryption.'
+description: 'How to secure a ClickHouse cluster with TLS using cert-manager, including client connections and Keeper encryption.'
 doc_type: 'guide'
 ---
 
@@ -41,7 +41,7 @@ contains three keys:
 
 This is exactly the layout cert-manager writes for a `Certificate` resource, so no
 conversion is needed. The operator mounts these into each pod at
-`/etc/clickhouse-server/tls/` and wires them into ClickHouse's `openSSL` config.
+`/etc/clickhouse-server/tls/` and wires them into ClickHouse's `openSSL` configuration.
 
 <Note>
 `serverCertSecret` is **mandatory** when `tls.enabled: true`. The validating
