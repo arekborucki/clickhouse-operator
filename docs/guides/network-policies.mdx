@@ -3,17 +3,16 @@ position: 7
 slug: /clickhouse-operator/guides/network-policies
 title: Network policies
 keywords: ['kubernetes', 'network policy', 'security', 'metrics', 'webhook']
-description: 'How the operator chart restricts ingress to the controller manager pod with Kubernetes NetworkPolicies for the metrics and webhook endpoints, how to enable them, and which client namespaces you must label.'
+description: 'How the operator restricts ingress to the controller manager pod with Kubernetes NetworkPolicies for the metrics and webhook endpoints, how to enable them, and which client namespaces you must label.'
 doc_type: 'guide'
 ---
 
-The operator chart ships optional Kubernetes `NetworkPolicy` resources that
+The operator ships optional Kubernetes `NetworkPolicy` resources that
 restrict which traffic can reach the **controller manager pod** — the operator
-process itself, not the ClickHouse server or Keeper pods. They are turned off by
-default and gated behind a single value, so you opt in only when you want to
-isolate the operator's ingress.
+process itself, not the ClickHouse server or Keeper pods. They are off by
+default, so you opt in only when you want to isolate the operator's ingress.
 
-The policies cover the two ports the operator exposes to other pods: the metrics
+The policies cover the two ports the operator exposes to other clients: the metrics
 endpoint and the admission webhook. Locking these down is a roadmap item for
 native Kubernetes and Cilium network policy support.
 
@@ -24,7 +23,7 @@ resources are created but silently have no effect — Kubernetes does not return
 error. Confirm your CNI enforces policies before relying on them.
 </Note>
 
-## What the chart creates {#what-the-chart-creates}
+## What the Helm chart creates {#what-the-helm-chart-creates}
 
 When enabled, the chart renders up to two ingress-only policies, both selecting
 the controller manager pod (`control-plane: controller-manager`):
@@ -33,6 +32,9 @@ the controller manager pod (`control-plane: controller-manager`):
 |---|---|---|---|
 | `allow-metrics-traffic` | `networkPolicy.enabled: true` | Namespaces labeled `metrics: enabled` | `metrics.port` (default `8080`/TCP) |
 | `allow-webhook-traffic` | `networkPolicy.enabled: true` **and** `webhook.enabled: true` | Namespaces labeled `webhook: enabled` | `webhook.port` (default `9443`/TCP) |
+
+The metrics policy is rendered whenever `networkPolicy.enabled: true`, even if
+the metrics endpoint itself is disabled with `metrics.enabled: false`.
 
 Both policies declare only `policyTypes: [Ingress]`. They do not restrict egress
 from the operator, and they do not touch ClickHouse server or Keeper pods.
@@ -73,6 +75,8 @@ default), so disabling the webhook also removes its policy.
 
 With the raw `kubectl` manifests, uncomment the `[NETWORK POLICY]` section as
 described in the [kubectl install guide](/products/kubernetes-operator/install/kubectl).
+The raw manifests include the same two policies, but their allowed ports are the
+Kustomize-managed service ports in `config/network-policy/`.
 
 ## Labeling client namespaces {#labeling-namespaces}
 
