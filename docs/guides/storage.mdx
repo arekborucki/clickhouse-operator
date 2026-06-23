@@ -45,12 +45,7 @@ spec:
 
 `dataVolumeClaimSpec` is optional. If you omit it and do not mount your own volume
 at the data path, ClickHouse writes to the container's ephemeral filesystem and the
-admission webhook returns a warning:
-
-```text
-no volume is mounted at the data path "/var/lib/clickhouse", which may lead to
-data loss if the cluster is restarted
-```
+admission webhook returns a warning that data may be lost if the cluster is restarted.
 
 This is intended only for throwaway or test clusters. To supply your own storage
 instead of `dataVolumeClaimSpec` — for example an `emptyDir` or a pre-provisioned
@@ -118,25 +113,8 @@ spec:
 
 The operator mounts each additional volume at `/var/lib/clickhouse/disks/<name>`
 and **generates the ClickHouse `storage_configuration` for you** — you do not write
-it by hand. It renders a configuration file (`10-storage-jbod.yaml`) that registers
-every additional disk and adds it to the built-in `default` storage policy:
-
-```yaml
-storage_configuration:
-  disks:
-    disk1:
-      path: /var/lib/clickhouse/disks/disk1/
-    disk2:
-      path: /var/lib/clickhouse/disks/disk2/
-  policies:
-    default:
-      volumes:
-        main:
-          disk:
-            - default
-            - disk1
-            - disk2
-```
+it by hand. It registers every additional disk and adds it to the built-in `default`
+storage policy.
 
 The primary data disk (`default`) and every additional disk share a single volume
 of the `default` policy, so ClickHouse spreads new data parts across all of them in
