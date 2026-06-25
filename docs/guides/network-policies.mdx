@@ -13,8 +13,7 @@ process itself, not the ClickHouse server or Keeper pods. They are off by
 default, so you opt in only when you want to isolate the operator's ingress.
 
 The policies cover the two ports the operator exposes to other clients: the metrics
-endpoint and the admission webhook. Locking these down is a roadmap item for
-native Kubernetes and Cilium network policy support.
+endpoint and the admission webhook.
 
 <Note>
 A `NetworkPolicy` is only enforced when the cluster's CNI plugin implements it
@@ -25,16 +24,13 @@ error. Confirm your CNI enforces policies before relying on them.
 
 ## What the Helm chart creates {#what-the-helm-chart-creates}
 
-When enabled, the chart renders up to two ingress-only policies, both selecting
-the controller manager pod (`control-plane: controller-manager`):
+When enabled, the chart creates up to two ingress-only policies, both selecting
+the controller manager pod:
 
-| Policy | Rendered when | Allowed source | Allowed port |
-|---|---|---|---|
-| `allow-metrics-traffic` | `networkPolicy.enabled: true` | Namespaces labeled `metrics: enabled` | `metrics.port` (default `8080`/TCP) |
-| `allow-webhook-traffic` | `networkPolicy.enabled: true` **and** `webhook.enabled: true` | Namespaces labeled `webhook: enabled` | `webhook.port` (default `9443`/TCP) |
-
-The metrics policy is rendered whenever `networkPolicy.enabled: true`, even if
-the metrics endpoint itself is disabled with `metrics.enabled: false`.
+| Policy | Allowed source | Allowed port |
+|---|---|---|
+| `allow-metrics-traffic` | Namespaces labeled `metrics: enabled` | `metrics.port` (default `8080`/TCP) |
+| `allow-webhook-traffic` | Namespaces labeled `webhook: enabled` | `webhook.port` (default `9443`/TCP) |
 
 Both policies declare only `policyTypes: [Ingress]`. They do not restrict egress
 from the operator, and they do not touch ClickHouse server or Keeper pods.
@@ -75,8 +71,7 @@ default), so disabling the webhook also removes its policy.
 
 With the raw `kubectl` manifests, uncomment the `[NETWORK POLICY]` section as
 described in the [kubectl install guide](/products/kubernetes-operator/install/kubectl).
-The raw manifests include the same two policies, but their allowed ports are the
-Kustomize-managed service ports in `config/network-policy/`.
+The raw manifests ship the same two policies.
 
 ## Labeling client namespaces {#labeling-namespaces}
 
