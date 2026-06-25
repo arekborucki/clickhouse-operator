@@ -9,9 +9,9 @@ doc_type: 'guide'
 
 The operator records Kubernetes events on the `ClickHouseCluster` and
 `KeeperCluster` objects it manages. These events trace what the operator did
-during reconciliation — which resources it created, when a cluster became ready,
-why it refused to scale — and surface failures that never reach a log a user
-normally reads. They complement the [metrics](/products/kubernetes-operator/guides/monitoring)
+during reconciliation — where resource changes failed, when a cluster became
+ready, why scaling was blocked — and surface failures that never reach a log a
+user normally reads. They complement the [metrics](/products/kubernetes-operator/guides/monitoring)
 by attaching a human-readable history directly to the custom resource.
 
 The `clickhouse-controller` reports events on `ClickHouseCluster` objects and the
@@ -96,7 +96,7 @@ Emitted on `KeeperCluster` as the operator changes the replica count.
 | `HorizontalScaleCompleted` | Normal | The scaling operation finished. |
 | `ReplicaCreated` | Normal | The operator added a replica to the cluster. |
 | `ReplicaDeleted` | Normal | The operator removed a replica during scale-down. |
-| `HorizontalScaleBlocked` | Warning | The operator refused to scale because the change would break safety — for Keeper, a scale that would lose RAFT quorum. |
+| `HorizontalScaleBlocked` | Warning | The operator refused to scale because the current Keeper state is not safe to scale yet. |
 
 <Note>
 `HorizontalScaleBlocked` is the event to watch when a Keeper scale request seems
@@ -118,7 +118,8 @@ the operator cannot use. See the External Secret feature in the
 
 ### Version checks {#version-checks}
 
-Emitted from the ClickHouse version probe and the upgrade check.
+Emitted by the version checks for `ClickHouseCluster` and `KeeperCluster`.
+`VersionProbeFailed` is specific to the ClickHouse version-probe Job.
 
 | Reason | Type | Meaning |
 |---|---|---|
@@ -134,7 +135,7 @@ Emitted from the ClickHouse version probe and the upgrade check.
 
 This last reason is distinct: it does not describe the operator's own actions. On
 each ready replica the operator periodically queries the server's
-[`system.warnings`](/operations/system-tables/system_warnings) table and
+[`system.warnings`](https://clickhouse.com/docs/operations/system-tables/system_warnings) table and
 republishes every row as a `Warning` event on the cluster, prefixed with the
 replica it came from. That turns ClickHouse's own configuration and runtime
 warnings — obsolete settings, low limits, unsafe options — into events you can see
