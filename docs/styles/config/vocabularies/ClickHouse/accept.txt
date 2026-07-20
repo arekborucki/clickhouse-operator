@@ -38,4 +38,3 @@ keypair
 Cilium
 Calico
 CNI
-[Rr]epublish(es|ed)?

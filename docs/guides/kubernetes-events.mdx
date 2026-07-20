@@ -15,17 +15,16 @@ user normally reads. They complement the [metrics](/products/kubernetes-operator
 by attaching a human-readable history directly to the custom resource.
 
 The `clickhouse-controller` reports events on `ClickHouseCluster` objects and the
-`keeper-controller` reports them on `KeeperCluster` objects. Each event also
-references the related owned object (a StatefulSet, Service, ConfigMap, Secret,
-PodDisruptionBudget, PersistentVolumeClaim, or version-probe Job) when the event
-concerns one.
+`keeper-controller` reports them on `KeeperCluster` objects. The resource
+lifecycle failure events also reference the owned object they concern (a
+StatefulSet, Service, ConfigMap, Secret, PodDisruptionBudget,
+PersistentVolumeClaim, or version-probe Job); other events reference only the
+cluster itself.
 
 <Note>
 The Kubernetes API server expires events after a TTL — one hour by default
 (`--event-ttl`). Events are therefore a short-lived signal for recent activity,
-not a durable audit trail. For long-term history, rely on the operator
-[metrics](/products/kubernetes-operator/guides/monitoring) and the `status.conditions`
-on the custom resource, both of which persist.
+not a durable audit trail.
 </Note>
 
 ## Viewing events {#viewing-events}
@@ -73,8 +72,8 @@ apply an owned resource during reconciliation.
 
 | Reason | Type | Meaning |
 |---|---|---|
-| `FailedCreate` | Warning | The operator could not create an owned resource (StatefulSet, Service, ConfigMap, Secret, PodDisruptionBudget, PVC, or Job). |
-| `FailedUpdate` | Warning | The operator could not update an owned resource. |
+| `FailedCreate` | Warning | The operator could not create an owned resource (e.g. StatefulSet, Service, ConfigMap, Secret, PodDisruptionBudget, or Job). |
+| `FailedUpdate` | Warning | The operator could not update a resource. |
 | `FailedDelete` | Warning | The operator could not delete an owned resource during reconcile or scale-down. |
 
 ### Cluster readiness {#cluster-readiness}
@@ -83,8 +82,8 @@ Emitted on both kinds when the cluster crosses a readiness boundary.
 
 | Reason | Type | Meaning |
 |---|---|---|
-| `ClusterReady` | Normal | Every replica reached the ready state. |
-| `ClusterNotReady` | Warning | The cluster left the ready state — one or more replicas are unavailable. |
+| `ClusterReady` | Normal | The cluster became ready: every ClickHouse shard has at least one ready replica, or the Keeper quorum has a leader and enough followers (or its single standalone replica is up). |
+| `ClusterNotReady` | Warning | The cluster left the ready state — a ClickHouse shard has no ready replica left, or the Keeper quorum lost its leader or too many followers. |
 
 ### Scaling {#scaling}
 
@@ -114,7 +113,7 @@ the operator cannot use. See the External Secret feature in the
 | Reason | Type | Meaning |
 |---|---|---|
 | `ExternalSecretNotFound` | Warning | The referenced Secret does not exist in the cluster's namespace. |
-| `ExternalSecretInvalid` | Warning | The Secret exists but is missing required keys (reported under the `Observe` policy, which does not generate them). |
+| `ExternalSecretInvalid` | Warning | The Secret exists but is missing required keys (only reported under the `Observe` policy). |
 
 ### Version checks {#version-checks}
 
@@ -124,8 +123,8 @@ Emitted by the version checks for `ClickHouseCluster` and `KeeperCluster`.
 | Reason | Type | Meaning |
 |---|---|---|
 | `VersionProbeFailed` | Warning | The version-probe Job could not detect the running ClickHouse version. |
-| `VersionDiverge` | Warning | A replica's detected version differs from the version the spec expects. |
-| `VersionUpgradeAvailable` | Warning | A newer version is available on the configured upgrade channel. The operator never upgrades on its own — this event only informs. |
+| `VersionDiverge` | Warning | A replica's detected version differs from the version the operator detected for the cluster. Suppressed during rolling updates. |
+| `VersionUpgradeAvailable` | Warning | A newer version is available on the configured upgrade channel, the running version is not on that channel, or it is out of support. The operator never upgrades on its own — this event only informs. |
 
 ### ClickHouse server warnings {#clickhouse-warnings}
 
@@ -145,10 +144,6 @@ with `kubectl` without opening a `clickhouse-client` session against each replic
 kubectl -n $NS get events \
   --field-selector reason=ClickHouseWarning,involvedObject.name=<name>
 ```
-
-Each distinct warning maps to a stable event key per replica, so a recurring
-server warning increments the count on a single event rather than flooding the
-stream.
 
 ## Events, metrics, and conditions {#events-vs-metrics}
 
@@ -177,9 +172,9 @@ A few common signals and where they point:
   resource. The event message carries the API error (admission rejection, quota,
   invalid spec). Reconciliation retries, so a transient cause clears on its own; a
   persistent one needs a spec or cluster fix.
-- **`ClusterNotReady` without a matching `ClusterReady`** — replicas are not
-  coming back. Check the pods and the StatefulSet referenced in the event's
-  related object.
+- **`ClusterNotReady` without a matching `ClusterReady`** — the cluster is not
+  recovering. The event message names the not-ready shards or the quorum
+  problem; check the pods behind them.
 - **`HorizontalScaleBlocked`** — an intended scale is being held for safety. Read
   the message for the exact constraint before forcing anything.
 - **`ExternalSecretNotFound` / `ExternalSecretInvalid`** — fix the Secret name or
